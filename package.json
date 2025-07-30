@@ -1,0 +1,21 @@
+{
+  "name": "screenshot-native",
+  "version": "1.0.0",
+  "description": "Native Windows screenshot module for Node.js",
+  "main": "index.js",
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "clean": "node-gyp clean",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "node-addon-api": "^7.0.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^10.0.0"
+  },
+  "gypfile": true,
+  "keywords": ["screenshot", "native", "windows", "screen-capture"],
+  "author": "Your Name",
+  "license": "MIT"
+} 
