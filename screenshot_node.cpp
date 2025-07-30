@@ -122,16 +122,57 @@ Napi::Value CaptureFullScreen(const Napi::CallbackInfo& info) {
     int width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
     int height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-    // 创建参数数组并调用CaptureScreen
-    Napi::Value args[] = {
-        Napi::Number::New(env, x),
-        Napi::Number::New(env, y),
-        Napi::Number::New(env, width),
-        Napi::Number::New(env, height)
-    };
+    initGdiPlus();
 
-    Napi::CallbackInfo new_info(env, info.GetNewTarget(), 4, args, info.Data());
-    return CaptureScreen(new_info);
+    HDC hScreen = GetDC(NULL);
+    HDC hDC = CreateCompatibleDC(hScreen);
+    HBITMAP hBitmap = CreateCompatibleBitmap(hScreen, width, height);
+    HGDIOBJ oldObj = SelectObject(hDC, hBitmap);
+    
+    BOOL result = BitBlt(hDC, 0, 0, width, height, hScreen, x, y, SRCCOPY);
+    
+    if (!result) {
+        SelectObject(hDC, oldObj);
+        DeleteDC(hDC);
+        DeleteObject(hBitmap);
+        ReleaseDC(NULL, hScreen);
+        Napi::TypeError::New(env, "Failed to capture full screen").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    // 获取图像数据
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biHeight = -height; // 负值表示从上到下
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    int imageSize = width * height * 4;
+    unsigned char* imageData = new unsigned char[imageSize];
+
+    GetDIBits(hDC, hBitmap, 0, height, imageData, &bmi, DIB_RGB_COLORS);
+
+    SelectObject(hDC, oldObj);
+    DeleteDC(hDC);
+    DeleteObject(hBitmap);
+    ReleaseDC(NULL, hScreen);
+
+    // 创建Node.js Buffer对象
+    Napi::Buffer<unsigned char> buffer = Napi::Buffer<unsigned char>::New(
+        env, imageData, imageSize, [](Napi::Env env, unsigned char* data) {
+            delete[] data;
+        });
+
+    // 返回对象包含图像数据和尺寸信息
+    Napi::Object result_obj = Napi::Object::New(env);
+    result_obj.Set("data", buffer);
+    result_obj.Set("width", Napi::Number::New(env, width));
+    result_obj.Set("height", Napi::Number::New(env, height));
+    result_obj.Set("stride", Napi::Number::New(env, width * 4));
+
+    return result_obj;
 }
 
 // 保存到PNG文件
